@@ -38,9 +38,9 @@ void delete_handle_lfo(handle_lfo_t *hlfo)
 lfo_data_t next_lfo_sample(handle_lfo_t *hlfo)
 {
   lfo_data_t frame;
-  unsigned int prev_idx = (unsigned int) hlfo->curpos;
+  unsigned int idx = (unsigned int) hlfo->curpos;
 
-  frame = hlfo->buffer[prev_idx];
+  frame = hlfo->buffer[idx];
   hlfo->curpos += hlfo->pad;
   if (hlfo->curpos >= hlfo->bufsz)
     hlfo->curpos = hlfo->curpos - hlfo->bufsz;
@@ -53,14 +53,12 @@ handle_lfo_t *init_handle_sin(unsigned int res)
 {
   handle_lfo_t  *hsin = init_handle_lfo(res);
   unsigned int  idx;
-  lfo_data_t    pi_pad;
 
   if (hsin == NULL)
     return NULL;
 
-  pi_pad = 2 * M_PI / hsin->bufsz;
   for (idx = 0; idx < hsin->bufsz; idx++)
-    hsin->buffer[idx] = sinf(pi_pad * idx);
+    hsin->buffer[idx] = sinf(idx * 2 * M_PI / hsin->bufsz);
   return hsin;
 }
 
@@ -93,6 +91,8 @@ typedef struct
 
 #include <string.h>
 
+#define _RATE_NUMERATOR_MAX 16
+
 LADSPA_Handle instantiate_bpm_lfo(const LADSPA_Descriptor *Descriptor,
                                   unsigned long SampleRate)
 {
@@ -101,7 +101,11 @@ LADSPA_Handle instantiate_bpm_lfo(const LADSPA_Descriptor *Descriptor,
   bzero(bpm_lfo, sizeof(bpm_lfo_t));
   if (bpm_lfo == NULL)
     return NULL;
-  bpm_lfo->lfo = init_handle_sin((unsigned int) SampleRate * 2);
+  /* note:
+     buffer_size = period_size * rate_numerator_max
+     period_size = SampleRate * 2 (2 time slower than 60 BPM)
+     buffer_size is set for LFO min speed (30 BPM / 16) */
+  bpm_lfo->lfo = init_handle_sin((unsigned int) SampleRate * 2 * _RATE_NUMERATOR_MAX);
   if (bpm_lfo->lfo == NULL)
     {
       free(bpm_lfo);
@@ -231,7 +235,7 @@ void set_rate_num_port(char **PortName,
   *PortName = strdup("Rate Numerator");
   *PortDescriptors = LADSPA_PORT_INPUT | LADSPA_PORT_CONTROL;
   PortRangeHints->LowerBound = 1;
-  PortRangeHints->UpperBound = 16;
+  PortRangeHints->UpperBound = _RATE_NUMERATOR_MAX;
   PortRangeHints->HintDescriptor = (LADSPA_HINT_BOUNDED_BELOW
                                     | LADSPA_HINT_BOUNDED_ABOVE
                                     | LADSPA_HINT_INTEGER);
